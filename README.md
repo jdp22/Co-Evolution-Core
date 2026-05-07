@@ -4,7 +4,7 @@
 Requires Python ≥ 3.10, CUDA, and one GPU per island engine.
 
 ```bash
-python -m venv es && source es/bin/activate
+python -m venv coevo && source coevo/bin/activate
 pip install vllm==0.11.0 tensorboard
 pip install -r requirement.txt
 ```
@@ -12,7 +12,7 @@ pip install -r requirement.txt
 ## Usage
 
 ```bash
-python es_fine-tuning_island.py \
+python island_finetuning.py \
   --model_name Qwen/Qwen2.5-7B-Instruct \
   --cuda_devices 0,1,2,3,4 \
   --num_islands 5 \
@@ -24,7 +24,7 @@ python es_fine-tuning_island.py \
   --alpha 0.0005 \
   --train_task countdown \
   --eval_tasks math500,gsm8k \
-  --experiment_dir es-ft-island-experiment
+  --experiment_dir island-ft-experiment
 ```
 
 Key arguments:

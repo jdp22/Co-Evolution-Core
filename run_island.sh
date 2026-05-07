@@ -1,5 +1,5 @@
 #!/bin/bash
-# Multi-Island ES fine-tuning for Countdown
+# Multi-Island fine-tuning for Countdown
 # K=5 islands, 1 engine each, 5 GPUs total
 # Marginal-contribution reward: lambda=0.5, no EMA
 
@@ -7,7 +7,7 @@ set -e
 cd "$(dirname "$0")"
 
 source ~/miniconda3/etc/profile.d/conda.sh
-conda activate es
+conda activate coevo
 
 # --- Config ---
 cuda_devices="0,1,2,3,4"
@@ -18,13 +18,13 @@ migration_lr=0.1
 marginal_lambda=1.0
 coverage_ema=1.0        # raw prev-iter, no EMA
 eval_tasks="math500,gsm8k"  # dataset names only; each uses handler.default_test_path
-experiment_dir=es-ft-island-experiment
+experiment_dir=island-ft-experiment
 log_file=${experiment_dir}/es_island_${num_islands}isl_marginal_$(date +%Y%m%d_%H%M%S).log
 
 mkdir -p ${experiment_dir}
 cp "$0" ${experiment_dir}/run_es_island_$(date +%Y%m%d_%H%M%S).sh
 
-nohup python -u es_fine-tuning_island.py \
+nohup python -u island_finetuning.py \
   --ray_port 6480 \
   --model_name Qwen/Qwen2.5-7B-Instruct \
   --cuda_devices ${cuda_devices} \

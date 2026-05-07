@@ -12,7 +12,7 @@ def _stateless_init_process_group(master_address, master_port, rank, world_size,
 
 class WorkerExtension:
     """
-    Methods used by the ES trainer:
+    Methods used by the trainer:
     - perturb_self_weights(seed, sigma_or_scale, coeff=1.0, negate=False)
     - restore_self_weights(seed, SIGMA)
     - init_inter_engine_group(master_address, master_port, rank, world_size)

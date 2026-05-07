@@ -1,9 +1,9 @@
 """
-Multi-Island ES fine-tuning for the Countdown task.
+Multi-Island fine-tuning for the Countdown task.
 
 Topology:
   K islands, each with `engines_per_island` vLLM engines.
-  Each island maintains its own ES population independently.
+  Each island maintains its own population independently.
   Every `migration_freq` iterations migrations happen:
     - Virtual Seed Migration: treat (θ_other - θ_self)/σ as an extra
       virtual seed with normalized reward weight = migration_lr,
@@ -51,7 +51,7 @@ NUM_ISLANDS    = 2
 ENGINES_PER_ISLAND = 2
 MIGRATION_FREQ = 50
 MIGRATION_LR   = 0.1
-EXPERIMENT_DIR = "es-ft-island-experiment"
+EXPERIMENT_DIR = "island-ft-experiment"
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +90,7 @@ def _convert_vllm_to_hf_state_dict(vllm_sd, hf_config):
 # ---------------------------------------------------------------------------
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Multi-Island ES Fine-tuning for Countdown Task"
+        description="Multi-Island Fine-tuning for Countdown Task"
     )
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-3B-Instruct")
     parser.add_argument("--sigma",          type=float, default=SIGMA)
@@ -117,7 +117,7 @@ def parse_args():
     parser.add_argument("--coverage_ema",        type=float, default=1.0,
                         help="EMA decay for other_coverage (1.0 = raw prev-iter, no smoothing).")
     parser.add_argument("--resume_from",         type=str,   default=None,
-                        help="Path to a previous logging_dir (e.g. es-ft-island-experiment/island_es_YYYYMMDD_HHMMSS) "
+                        help="Path to a previous logging_dir (e.g. island-ft-experiment/island_run_YYYYMMDD_HHMMSS) "
                              "to resume from. Each island will load islandX_checkpoint_iter_<start_iter>/pytorch_model.pth.")
     parser.add_argument("--start_iter",          type=int,   default=0,
                         help="Iteration number to resume from (0-based). "
@@ -156,9 +156,9 @@ def parse_args():
 
 
 # ---------------------------------------------------------------------------
-# ESNcclLLM
+# IslandNcclLLM
 # ---------------------------------------------------------------------------
-class ESNcclLLM(LLM):
+class IslandNcclLLM(LLM):
     def __init__(self, *args, **kwargs):
         os.environ.pop("CUDA_VISIBLE_DEVICES", None)
         os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
@@ -305,7 +305,7 @@ def launch_engines(num_engines, model_name):
     ]
 
     engines = [
-        ray.remote(num_cpus=0, num_gpus=0, scheduling_strategy=strategy)(ESNcclLLM).remote(
+        ray.remote(num_cpus=0, num_gpus=0, scheduling_strategy=strategy)(IslandNcclLLM).remote(
             model=model_name,
             tensor_parallel_size=1,
             distributed_executor_backend="ray",
@@ -396,16 +396,16 @@ def _finalize_replay_record(record):
 
 
 # ---------------------------------------------------------------------------
-# Per-island ES step
+# Per-island population step
 # ---------------------------------------------------------------------------
-def run_island_es_step(island_idx, engines, task_datas, tokenizer, seeds, args, writer, iteration,
+def run_island_step(island_idx, engines, task_datas, tokenizer, seeds, args, writer, iteration,
                        other_coverage=None, handler=None):
     """
-    Run one ES generation for a single island.
+    Run one population generation for a single island.
 
     other_coverage : np.ndarray [M] float32 or None
         EMA-smoothed fraction of OTHER islands' population answering each question correctly.
-        When not None and args.marginal_lambda > 0, the NES fitness becomes:
+        When not None and args.marginal_lambda > 0, the blended fitness becomes:
             r_nes = (1-λ)*r_indiv + λ*r_marginal
         where r_marginal[s] rewards covering questions the other islands DON'T cover.
 
@@ -481,11 +481,11 @@ def run_island_es_step(island_idx, engines, task_datas, tokenizer, seeds, args, 
           (f"  tok_mean={tok_mean:.0f}  tok_p90={tok_p90:.0f}" if all_output_lens else ""))
 
     # -----------------------------------------------------------------
-    # Build NES fitness: blend individual + marginal-contribution reward
+    # Build blended fitness: individual + marginal-contribution reward
     #
     # Convergence note: using a fixed other_coverage (EMA-smoothed, from
-    # the previous iteration) keeps the landscape quasi-stationary so NES
-    # gradient estimates remain consistent within a generation. The 1-λ
+    # the previous iteration) keeps the landscape quasi-stationary so
+    # fitness estimates remain consistent within a generation. The 1-λ
     # individual component ensures each island continues to improve even
     # when other islands cover everything, preventing reward collapse.
     # -----------------------------------------------------------------
@@ -518,7 +518,7 @@ def run_island_es_step(island_idx, engines, task_datas, tokenizer, seeds, args, 
 
     nes_mean = float(np.mean(nes_rewards))
     nes_std  = float(np.std(nes_rewards))
-    # Log NES fitness distribution
+    # Log fitness distribution
     writer.add_scalar(f"{prefix}reward/nes_mean", nes_mean, iteration)
     writer.add_scalar(f"{prefix}reward/nes_std",  nes_std,  iteration)
     writer.add_histogram(f"{prefix}reward/indiv_dist",  indiv_rewards, iteration)
@@ -526,7 +526,7 @@ def run_island_es_step(island_idx, engines, task_datas, tokenizer, seeds, args, 
     for i, s in enumerate(seeds):
         seeds_perf[s]["norm_reward"] = (float(nes_rewards[i]) - nes_mean) / (nes_std + 1e-8)
 
-    # Apply ES update on engine 0
+    # Apply weight update on engine 0
     per_seed_coeffs = [
         (seed, (args.alpha / args.population_size) * float(seeds_perf[seed]["norm_reward"]))
         for seed in seeds
@@ -605,7 +605,7 @@ def main(args):
     ray.init(address="local", include_dashboard=False, ignore_reinit_error=True,
              _temp_dir=ray_temp_dir)
 
-    logging_dir = f"{args.experiment_dir}/island_es_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    logging_dir = f"{args.experiment_dir}/island_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     writer = SummaryWriter(log_dir=logging_dir)
     model_saves_dir = f"{logging_dir}/model_saves"
     os.makedirs(model_saves_dir, exist_ok=True)
@@ -858,7 +858,7 @@ def main(args):
                         writer.add_scalar("ensemble/fully_covered_frac",
                                           float(np.mean(ensemble_cov > 0.5)), iteration)
 
-                _, mean_r, behavior_mat, per_seed_coeffs = run_island_es_step(
+                _, mean_r, behavior_mat, per_seed_coeffs = run_island_step(
                     isl_idx, isl_engines, task_datas, tokenizer, seeds, args, writer, iteration,
                     other_coverage=other_coverage, handler=handler
                 )
