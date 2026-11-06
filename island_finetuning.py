@@ -1,17 +1,20 @@
 """
-Multi-Island fine-tuning for the Countdown task.
+Core Co-Evolve multi-island fine-tuning implementation.
 
 Topology:
   K islands, each with `engines_per_island` vLLM engines.
   Each island maintains its own population independently.
-  Every `migration_freq` iterations migrations happen:
+  Each island evaluates perturbations and applies individual plus
+  marginal-coverage credit from peer coverage. Every `migration_freq`
+  iterations migrations happen:
     - Virtual Seed Migration: treat (θ_other - θ_self)/σ as an extra
       virtual seed with normalized reward weight = migration_lr,
       i.e. engine-0 of each island receives the CPU weights from the
       other island's engine-0 and does: θ += migration_lr*(θ_other - θ).
       Then broadcast within the island (NCCL).
 
-No diversity reward (clean island-model baseline).
+The implementation records seed-based updates and replay metadata so that
+island checkpoints can be audited and reconstructed.
 """
 
 import argparse

@@ -7,8 +7,12 @@ that are under-covered by its peers. The trainer implements this objective with
 evolution strategies and records the seed-based parameter updates used by each
 island.
 
-Paper: **Co-Evolution: A "One-to-many" LLM Fine-Tuning Paradigm** (NeurIPS
-2026, accepted as a poster).
+Paper: [**Co-Evolution: A "One-to-many" LLM Fine-Tuning Paradigm**](https://github.com/jdp22/Co-evolution-A-One-to-many-LLM-Fine-Tuning-Paradigm)
+(NeurIPS 2026, accepted as a poster). The camera-ready source and compiled
+paper are maintained in that paper repository.
+
+The public core implementation is this repository:
+[github.com/jdp22/Co-Evolution-Core](https://github.com/jdp22/Co-Evolution-Core).
 
 The repository is intentionally focused on the released training core:
 
@@ -16,6 +20,11 @@ The repository is intentionally focused on the released training core:
 - vLLM worker extensions for seeded perturbations and weight synchronization;
 - dataset handlers and reward functions for the supported tasks;
 - checkpoint and replay-log writing during training.
+
+The main algorithm entry point is [`island_finetuning.py`](island_finetuning.py).
+It implements the multi-island perturbation loop, peer-coverage reweighting,
+seed-based updates, checkpointing, and replay-log emission used by the paper's
+core method.
 
 Later exploratory experiments and large raw experiment directories are not part
 of this repository.
